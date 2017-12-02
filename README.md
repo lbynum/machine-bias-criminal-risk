@@ -33,7 +33,7 @@
 
 ## Data:
 	The data was released along with the article and methodology. It contains information regarding 
-	the defendant’s COMPAS 	       score, race, age, criminal history, future recidivism, charge 
+	the defendant’s COMPAS score, race, age, criminal history, future recidivism, charge 
 	degree, gender and age.
 
 ## Variables:
