@@ -1,0 +1,79 @@
+---
+title: "COMPAS Data Visualization"
+author: "Lucius Bynum, Preethi Seshadri"
+date: '19 November 2017'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, cache=TRUE)
+options(digits=4)
+
+library(DBI)
+library(dplyr)
+```
+
+
+# Main Database Connection
+
+Connect to the database and see which tables it contains. 
+
+```{r}
+con <- dbConnect(RSQLite::SQLite(), 'compas.db')
+dbListTables(con)
+```
+
+# Case Arrest
+
+```{r}
+casearrest <- tbl(con, 'casearrest') %>% data.frame()
+summary(casearrest)
+```
+
+# Charge
+
+```{r}
+charge <- tbl(con, 'charge') %>% data.frame()
+summary(charge)
+```
+
+# COMPAS
+
+```{r}
+compas <- tbl(con, 'compas') %>% data.frame()
+summary(compas)
+```
+
+# Jail History
+
+```{r}
+jailhistory <- tbl(con, 'jailhistory') %>% data.frame()
+summary(jailhistory)
+```
+
+# People
+
+```{r}
+people <- tbl(con, 'people') %>% data.frame()
+summary(people)
+```
+
+# Prison History
+
+```{r}
+prisonhistory <- tbl(con, 'prisonhistory') %>% data.frame()
+summary(prisonhistory)
+```
+
+# Summary
+
+```{r}
+summary_tbl <- tbl(con, 'summary') %>% data.frame()
+summary(summary_tbl)
+```
+
+# Compas Scores Raw
+
+```{r}
+# compas_scores_raw <- read.csv('compas-scores-raw.csv')
+```
