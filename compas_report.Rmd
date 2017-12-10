@@ -10,6 +10,8 @@ knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, cache=TRUE)
 options(digits=4)
 
 library(dplyr)
+library(GGally)
+library(ggplot2)
 ```
 
 # Introduction
@@ -128,8 +130,6 @@ library(dplyr)
 | end                     | **TODO**|
 | event                   | **TODO**|
 
-**TODO**: add a data dictionary here
-
 ProPublica obtained this data with the goal of analyzing Northpointe Inc.’s commercial recidivism modeling tool -- COMPAS. Aggregating data from public records, they collected data on 18,610 individuals who received COMPAS scores from 2013 to 2014, including demographic information, public criminal records, and incarceration records.
 
 *How are COMPAS scores used?*
@@ -166,7 +166,25 @@ summary(compas_scores[(ncol(compas_scores)/2 + 1):ncol(compas_scores)])
 
 With the second half we have similar characteristics as before. We remove the `violent_recid` column given that all values are `NA` (as mentioned in the data dictionary). Apart from that column, we make no other changes.
 
+```{r}
+vars <- compas_scores %>% 
+  select(sex, race, age, ends_with('count'), c_charge_degree, is_recid)
+
+# ggplot(vars, aes(x = race, y = decile_score)) + geom_boxplot()
+```
+
 # Logistic Regression Model
+
+```{r}
+regmod <- glm(is_recid ~., family = binomial(link='logit'), data = vars)
+summary(regmod)
+fitted_values <- fitted(regmod)
+vars <- cbind(vars, fitted_values)
+```
+
+## ProPublica's Bias-Assessment Model
+
+**TODO**: implement ProPublica's logreg model and use it with the fitted values of our model
 
 ## Variable Selection
 
