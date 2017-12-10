@@ -9,15 +9,168 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, cache=TRUE)
 options(digits=4)
 
-library(DBI)
 library(dplyr)
 ```
 
-# The
+# Introduction
 
-# Compas Scores Two Years
+# Problem Statement
+
+# Data Description
+
+### Data Dictionary
+
+<!-- -id: unque identifier for each individual -->
+<!-- -name: first and last name -->
+<!-- -first: first name -->
+<!-- -last: last name -->
+<!-- -compas_screening_dat: date on which decile_score was given -->
+<!-- -sex: sex (male or female) -->
+<!-- -dob: date of birth -->
+<!-- -age: age in years -->
+<!-- -age_cat: age category (less than 25, 25-45, greater than 45) -->
+<!-- -race: race (African-American, Asian, Caucasian, Hispanic, Native American, Other) -->
+<!-- -juv_fel_count: juvenile felony count -->
+<!-- -decile_score: COMPAS Risk of Recidivism score from 1 to 10 -->
+<!-- -juv_misd_count: juvenile misdemeanor count -->
+<!-- -juv_other_count: juvenile other offenses count -->
+<!-- -priors_count: prior offenses count -->
+<!-- -days_b_screening_arrest: number of days between COMPAS screening and arrest **TODO**: negative values? -->
+<!-- -c_jail_in: jail entry date for original crime -->
+<!-- -c_jail_out: jail exit date for original crime -->
+<!-- -c_case_number: case number for original crime -->
+<!-- -c_offense_date: offense date of original crime -->
+<!-- -c_arrest_date: arrest date for original crime -->
+<!-- -c_days_from_compas: days between COMPAS screening and original crime offense date -->
+<!-- -c_charge_degree: charge degree of original crime -->
+<!-- -c_charge_desc: description of charge for original crime -->
+<!-- -is_recid: binary indicator of recidivation (1=individual recidivated, 0=individual did not recidivate) -->
+<!-- -r_case_number: case number of follow-up crime -->
+<!-- -r_charge_degree: charge degree of follow-up crime -->
+<!-- -r_days_from_arrest: number of days between follow-up crime and arrest date **TODO**: why negative value here? -->
+<!-- -r_offense_date: date of follow-up crime -->
+<!-- -r_charge_desc: description of charge for follow-up crime -->
+<!-- -r_jail_in: jail entry date for follow-up crime -->
+<!-- -r_jail_out: jail exit date for follow-up crime -->
+<!-- -violent_recid: values are all `NA`. This column is ignored. -->
+<!-- -is_voilent_recid: binary indicator of violent follow-up crime (1=follow-up crime was violent, 0=follow-up crime was non-violent) -->
+<!-- -vr_case_number: case number for violent follow-up crime -->
+<!-- -vr_charge_degree: charge degree for violent follow-up crime -->
+<!-- -vr_offense_date: date of offense for violent follow-up crime -->
+<!-- -vr_charge_desc: description of charge for violent follow-up crime -->
+<!-- -type_of_assessment: the type of COMPAS score given for decile_score (here all values are Risk of Recidivism) -->
+<!-- -decile_score.1: repeat column of decile_score -->
+<!-- -score_text: ProPublica-defined category of decile_score (High: 8-10, Medium: 5-7, Low: 1-4) -->
+<!-- -screening_date: repeat column of compas_screening_date  -->
+<!-- -v_type_of_assessment: the type of COMPAS score given for v_decile_score (here all values are Risk_of_Violence) -->
+<!-- -v_decile_score: COMPAS Risk of Violence score from 1 to 10 -->
+<!-- -v_score_text: ProPublica-defined category of v_decile_score (High: 8-10, Medium: 5-7, Low: 1-4) -->
+<!-- -v_screening_date: date on which v_decile_score was given -->
+<!-- -in_custody: date on which individual was brought into custody -->
+<!-- -out_custody: date on which individual was released from custody -->
+<!-- -priors_count.1: repeat column of priors_count -->
+<!-- -start: **TODO** -->
+<!-- -end: **TODO** -->
+<!-- -event: **TODO** -->
+
+| Variable| Description|
+|--------------------------|----------------------------------------------------------------------------------------------------------------|
+| id                      | unque identifier for each individual|
+| name                    | first and last name|
+| first                   | first name|
+| last                    | last name|
+| compas_screening_dat    | date on which decile_score was given|
+| sex                     | sex (male or female)|
+| dob                     | date of birth|
+| age                     | age in years|
+| age_cat                 | age category (less than 25, 25-45, greater than 45)|
+| race                    | race (African-American, Asian, Caucasian, Hispanic, Native American, Other)|
+| juv_fel_count           | juvenile felony count|
+| decile_score            | COMPAS Risk of Recidivism score from 1 to 10|
+| juv_misd_count          | juvenile misdemeanor count|
+| juv_other_count         | juvenile other offenses count|
+| priors_count            | prior offenses count|
+| days_b_screening_arrest | number of days between COMPAS screening and arrest **TODO** negative values?|
+| c_jail_in               | jail entry date for original crime|
+| c_jail_out              | jail exit date for original crime|
+| c_case_number           | case number for original crime|
+| c_offense_date          | offense date of original crime|
+| c_arrest_date           | arrest date for original crime|
+| c_days_from_compas      | days between COMPAS screening and original crime offense date|
+| c_charge_degree         | charge degree of original crime|
+| c_charge_desc           | description of charge for original crime|
+| is_recid                | binary indicator of recidivation (1=individual recidivated, 0=individual did not recidivate)|
+| r_case_number           | case number of follow-up crime|
+| r_charge_degree         | charge degree of follow-up crime|
+| r_days_from_arrest      | number of days between follow-up crime and arrest date **TODO** why negative value here?|
+| r_offense_date          | date of follow-up crime|
+| r_charge_desc           | description of charge for follow-up crime|
+| r_jail_in               | jail entry date for follow-up crime|
+| r_jail_out              | jail exit date for follow-up crime|
+| violent_recid           | values are all `NA`. This column is ignored.|
+| is_voilent_recid        | binary indicator of violent follow-up crime (1=follow-up crime was violent, 0=follow-up crime was non-violent) |
+| vr_case_number          | case number for violent follow-up crime|
+| vr_charge_degree        | charge degree for violent follow-up crime|
+| vr_offense_date         | date of offense for violent follow-up crime|
+| vr_charge_desc          | description of charge for violent follow-up crime|
+| type_of_assessment      | the type of COMPAS score given for decile_score (here all values are Risk of Recidivism)|
+| decile_score.1          | repeat column of decile_score|
+| score_text              | ProPublica-defined category of decile_score (High=8-10, Medium=5-7, Low=1-4)|
+| screening_date          | repeat column of compas_screening_date|
+| v_type_of_assessment    | the type of COMPAS score given for v_decile_score (here all values are Risk_of_Violence)|
+| v_decile_score          | COMPAS Risk of Violence score from 1 to 10|
+| v_score_text            | ProPublica-defined category of v_decile_score (High=8-10, Medium=5-7, Low=1-4)|
+| v_screening_date        | date on which v_decile_score was given|
+| in_custody              | date on which individual was brought into custody|
+| out_custody             | date on which individual was released from custody|
+| priors_count.1          | repeat column of priors_count|
+| start                   | **TODO**|
+| end                     | **TODO**|
+| event                   | **TODO**|
+
+**TODO**: add a data dictionary here
+
+ProPublica obtained this data with the goal of analyzing Northpointe Inc.’s commercial recidivism modeling tool -- COMPAS. Aggregating data from public records, they collected data on 18,610 individuals who received COMPAS scores from 2013 to 2014, including demographic information, public criminal records, and incarceration records.
+
+*How are COMPAS scores used?*
+
+ProPublica describes that at least in Broward County, they “primarily [use] the score to determine whether to release or detain a defendant before his or her trial.” 11,757 of the individuals in the database had their COMPAS scores used to assess whether or not they should be released before their trial.
+
+*What are COMPAS scores?*
+
+There are three types of COMPAS score. Each measures a type of ‘risk’ associated with a criminal re-offending in some way on a scale of 1 (low) to 10 (high). As ProPublica describes, these include 
+
+- *Risk of Recidivism*: ProPublica defines this as the person in question committing a “criminal offense that [results] in a jail booking and [takes] place after the crime for which the person was COMPAS scored.”  Northpointe hopes to use this score to predict “a new misdemeanor or felony offense within two years of the COMPAS administration date.”
+- *Risk of Violence*: They use the FBI definition of violent crime: 
+    
+    *In the FBI’s Uniform Crime Reporting (UCR) Program, violent crime is composed of four offenses: murder and nonnegligent manslaughter, forcible rape, robbery, and aggravated assault. Violent crimes are defined in the UCR Program as those offenses which involve force or threat of force. - ucr.fbi.gov*
+
+- *Risk of Failure to Appear*: As evidenced by the name, this describes a failure to appear at the court hearing. 
+
+
+
+# Exploratory Data Analysis
+
+We first load in the data provided by ProPublica, and take a quick look at summaries of each variable to get a sense of distribution and potential outliers. We'll look at half of the columns at a time to keep things manageable. 
 
 ```{r}
 compas_scores <- read.csv('compas-scores-two-years.csv')
-summary(compas_scores)
+summary(compas_scores[1:(ncol(compas_scores)/2)])
 ```
+
+Here we notice there may be large outliers in many of the crime count variables, such as `juv_fel_count`, `juv_misd_count`, `juv_other_count`, and `priors_count`. We expect these are simply accurate observations corresponding to individuals with high numbers of prior offenses. Thus we will not remove these individuals from the data but will be aware of them as potential influential points when we later fit any models. We also note that the values for the 'days_from' variables are quite variable which may be relevant if we use those variables in later analysis. Looking at the second half of the columns, we have:
+
+```{r}
+summary(compas_scores[(ncol(compas_scores)/2 + 1):ncol(compas_scores)])
+```
+
+With the second half we have similar characteristics as before. We remove the `violent_recid` column given that all values are `NA` (as mentioned in the data dictionary). Apart from that column, we make no other changes.
+
+# Logistic Regression Model
+
+## Variable Selection
+
+# Clustering
+
+
+
