@@ -12,6 +12,7 @@ options(digits=4)
 library(dplyr)
 library(GGally)
 library(ggplot2)
+library(e1071)
 ```
 
 # Introduction
@@ -19,6 +20,10 @@ library(ggplot2)
 # Problem Statement
 
 # Data Description
+
+ProPublica collected data on **TODO**
+
+In the data set we look at, they considered only people who either "recidivated within two years of their crime or "recidivated in tow years, or had at least tow years outside of a correctional facility."
 
 ### Data Dictionary
 
@@ -184,7 +189,111 @@ vars <- cbind(vars, fitted_values)
 
 ## ProPublica's Bias-Assessment Model
 
-**TODO**: implement ProPublica's logreg model and use it with the fitted values of our model
+This section is meant to recreate ProPublica's logistic regression model for assessing bias in COMPAS scores. The code and explanations in this section are taken from their [published methodlogy and code](https://github.com/propublica/compas-analysis). 
+
+Using the same data set, they first filter rows based on the following criteria.
+
+1. consider only individuals with a COMPAS score
+2. assure the COMPAS score corresponds to the correct crime i.e. the score was given within 30 days of the arrest
+3. do not include ordinary traffic offenses
+
+Next we use their code to perform this filtering:
+
+```{r}
+# code from https://github.com/propublica/compas-analysis
+df <- compas_scores %>%
+  select(age, c_charge_degree, race, age_cat, score_text, sex, priors_count, days_b_screening_arrest, decile_score, is_recid, two_year_recid, c_jail_in, c_jail_out) %>% 
+  filter(days_b_screening_arrest <= 30) %>%
+  filter(days_b_screening_arrest >= -30) %>%
+  filter(is_recid != -1) %>%
+  filter(c_charge_degree != "O") %>%
+  filter(score_text != 'N/A')
+nrow(df)
+```
+
+In order to use this data to assess racial bias in scoring, the ProPublica analysts first create several factor variables from the existing columns.
+
+```{r}
+# code from https://github.com/propublica/compas-analysis
+df <- mutate(df, crime_factor = factor(c_charge_degree)) %>%
+      mutate(age_factor = as.factor(age_cat)) %>%
+      within(age_factor <- relevel(age_factor, ref = 1)) %>%
+      mutate(race_factor = factor(race)) %>%
+      within(race_factor <- relevel(race_factor, ref = 3)) %>%
+      mutate(gender_factor = factor(sex, labels= c("Female","Male"))) %>%
+      within(gender_factor <- relevel(gender_factor, ref = 2)) %>%
+      mutate(score_factor = factor(score_text != "Low", labels = c("LowScore","HighScore")))
+```
+
+For the `age_factor` they make "25 - 45" the reference level, for `race_factor` "Caucasian" is the reference level, for `gender_factor` "Male" is the reference level. 
+
+Next they fit a logistic regression model to predict `score_factor` from the other variables.
+
+```{r}
+# code from https://github.com/propublica/compas-analysis
+pp_model <- glm(
+  score_factor ~ gender_factor + age_factor + race_factor + priors_count + crime_factor + two_year_recid, 
+  family="binomial", 
+  data=df
+)
+summary(pp_model)
+```
+
+#### Calculating Relative Risk by Demographic
+
+Next they compute how much more likely different demographic groups are to receive a higher score than others. The logistic regression model allows us to measure this difference after correcting for the other variables included in the model. The quantity ProPublica uses to compare black defendants to white defendants (or men to women, old defendants to young defendants, etc.) is called **relative risk**. ProPublica does not explain where this quantity comes from in their analysis, so we'll provide some quick background on logistic regression to justify the calculation. The following explanation is inspired by USC professor Sandy Eckel's slides [here](http://www-hsc.usc.edu/~eckel/biostat2/notes/notes14.pdf).
+
+Logistic regression models a linear relationship between the log odds ratio for the probability of interest and the given predictor variables. An odds ratio measures the odds of success
+
+$$\texttt{odds ratio} = \frac{\texttt{probability of success}}{\texttt{probability of failure}} = \frac{P}{1 - P}$$
+
+where $P$ is the probability of success. The log odds ratio is simply the log of this quantity. Thus the logistic regression model for observation $x_i$ is
+
+$$\log(\frac{P_{x_i}}{1-P_{x_i}}) = \beta_0 + \beta_1x_{i1} + \ldots + \beta_px_{ip}$$
+
+where the probability of success for $x_i$ is $P_{x_i}$, and we have $p$ predictors with corresponding coeffecients $\beta_j$ and observed values $x_{ij}$ for $j=1,\ldots,p$. Given that our model here uses categorical predictors (factors), the coeffecients we estimate give us the **change in log odds** for the corresponding variable. Thus if we let $P_{x_i}$ be the probability that individual $x_i$ gets a high COMPAS score, then with coefficent $\beta_1$ for `gender_factor`, we would have
+
+$$\beta_0: \text{the log odds of getting a high COMPAS score for men}$$
+$$\beta_1: \text{the difference in log odds of getting a high COMPAS score for women compared to men}$$
+
+The important observation here is that because men are the reference level for the `gender_factor` categorical variable, $\beta_1$ measures a **difference** relative to men. Thus if we want to answer the question, "How much more likely are women to get a high COMPAS score than men?" we'll want to use
+
+$$\beta_0 + \beta_1: \text{the log odds of getting a high COMPAS score for women}$$
+
+to get the comparison. One other observation will also be helpful to calculate relative risk. We solve for $P_{x_i}$ as follows.
+
+$$\log(\frac{P}{1 - P}) = x \rightarrow P = \frac{e^x}{1 + e^x} = \texttt{sigmoid}(x)$$
+
+Thus we calculate relative risk for the categorical variable corresponding to $\beta_1$ as:
+
+$$\texttt{relative risk} = \frac{P_1}{P_2} = \frac{\texttt{sigmoid}(\beta_0 + \beta_1)}{\texttt{sigmoid}(\beta_0)}$$
+
+ProPublica computes relative risk to compare blacks to whites, men to women, and people under 25 to middle-aged people in terms of COMPAS scores. They get the following results.
+
+```{r}
+# code adapted from https://github.com/propublica/compas-analysis
+model_intercept <- coef(pp_model)['(Intercept)']
+black_coef <- coef(pp_model)['race_factorAfrican-American']
+(relative_risk_black_v_white <- sigmoid(model_intercept + black_coef) / sigmoid(model_intercept))
+```
+
+As ProPublica states, this shows us that "Black defendants are 45% more likely than white defendants to receive a higher [COMPAS] score correcting for the seriousness of their crime, previous arrests, and future criminal behavior." Similarly, women are 19.4\% more likely than men and people under 25 are 2.5 times as likely as middle aged people to get a higher score:
+
+```{r}
+# code adapted from https://github.com/propublica/compas-analysis
+woman_coef <- coef(pp_model)['gender_factorFemale']
+(relative_risk_woman_v_man <- sigmoid(model_intercept + woman_coef) / sigmoid(model_intercept))
+```
+
+```{r}
+# code adapted from https://github.com/propublica/compas-analysis
+age_coef <- coef(pp_model)['age_factorLess than 25']
+(relative_risk_young_v_middleage <- sigmoid(model_intercept + age_coef) / sigmoid(model_intercept))
+```
+
+## Using ProPublica's Bias-Assessment Model on Our Model
+
+We can see if our model suffers from the same bias using ProPublica's bias-assessment methodology. We'll set up the same model they did, but this time instead of predicting `score_factor` for the COMPAS score, we'll create a `score_factor` variable *from our model's predictions*.
 
 ## Variable Selection
 
