@@ -2,7 +2,12 @@
 title: "COMPAS Data Visualization"
 author: "Lucius Bynum, Preethi Seshadri"
 date: '19 November 2017'
-output: html_document
+# output: 
+#   html_document:
+#     theme: journal
+#     highlight: tango
+#     df_print: paged
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -26,6 +31,8 @@ ProPublica collected data on **TODO**
 In the data set we look at, they considered only people who either "recidivated within two years of their crime or "recidivated in tow years, or had at least tow years outside of a correctional facility."
 
 ### Data Dictionary
+
+ProPublica did not provide a data dictionary explaining their variables. Through some manual exploration, we came up with the following descriptions for our best guess at what each variable measures.
 
 <!-- -id: unque identifier for each individual -->
 <!-- -name: first and last name -->
@@ -298,6 +305,8 @@ We can see if our model suffers from the same bias using ProPublica's bias-asses
 ## Variable Selection
 
 # Clustering
+
+
 
 
 
