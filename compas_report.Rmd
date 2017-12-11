@@ -178,15 +178,6 @@ vars <- compas_scores %>%
 # ggplot(vars, aes(x = race, y = decile_score)) + geom_boxplot()
 ```
 
-# Logistic Regression Model
-
-```{r}
-regmod <- glm(is_recid ~., family = binomial(link='logit'), data = vars)
-summary(regmod)
-fitted_values <- fitted(regmod)
-vars <- cbind(vars, fitted_values)
-```
-
 ## ProPublica's Bias-Assessment Model
 
 This section is meant to recreate ProPublica's logistic regression model for assessing bias in COMPAS scores. The code and explanations in this section are taken from their [published methodlogy and code](https://github.com/propublica/compas-analysis). 
@@ -289,6 +280,15 @@ woman_coef <- coef(pp_model)['gender_factorFemale']
 # code adapted from https://github.com/propublica/compas-analysis
 age_coef <- coef(pp_model)['age_factorLess than 25']
 (relative_risk_young_v_middleage <- sigmoid(model_intercept + age_coef) / sigmoid(model_intercept))
+```
+
+## Our Logistic Regression Model
+
+```{r}
+regmod <- glm(is_recid ~., family = binomial(link='logit'), data = vars)
+summary(regmod)
+fitted_values <- fitted(regmod)
+vars <- cbind(vars, fitted_values)
 ```
 
 ## Using ProPublica's Bias-Assessment Model on Our Model
