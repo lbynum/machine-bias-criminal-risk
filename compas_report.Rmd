@@ -2,12 +2,12 @@
 title: "COMPAS Data Visualization"
 author: "Lucius Bynum, Preethi Seshadri"
 date: '19 November 2017'
-# output: 
-#   html_document:
-#     theme: journal
-#     highlight: tango
-#     df_print: paged
-output: pdf_document
+output:
+  html_document:
+    theme: journal
+    highlight: tango
+    df_print: paged
+# output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -160,7 +160,6 @@ There are three types of COMPAS score. Each measures a type of ‘risk’ associ
 - *Risk of Failure to Appear*: As evidenced by the name, this describes a failure to appear at the court hearing. 
 
 
-
 # Exploratory Data Analysis
 
 We first load in the data provided by ProPublica, and take a quick look at summaries of each variable to get a sense of distribution and potential outliers. We'll look at half of the columns at a time to keep things manageable. 
@@ -178,16 +177,9 @@ summary(compas_scores[(ncol(compas_scores)/2 + 1):ncol(compas_scores)])
 
 With the second half we have similar characteristics as before. We remove the `violent_recid` column given that all values are `NA` (as mentioned in the data dictionary). Apart from that column, we make no other changes.
 
-```{r}
-vars <- compas_scores %>% 
-  select(sex, race, age, ends_with('count'), c_charge_degree, is_recid)
-
-# ggplot(vars, aes(x = race, y = decile_score)) + geom_boxplot()
-```
-
 ## ProPublica's Bias-Assessment Model
 
-This section is meant to recreate ProPublica's logistic regression model for assessing bias in COMPAS scores. The code and explanations in this section are taken from their [published methodlogy and code](https://github.com/propublica/compas-analysis). 
+This section is meant to recreate ProPublica's logistic regression model for assessing bias in COMPAS scores. The code and explanations in this section are adapted from their [published methodlogy and code](https://github.com/propublica/compas-analysis). 
 
 Using the same data set, they first filter rows based on the following criteria.
 
@@ -291,22 +283,94 @@ age_coef <- coef(pp_model)['age_factorLess than 25']
 
 ## Our Logistic Regression Model
 
+### Variable Selection
+
+**TODO**: talk about excluding race but including sex
+
+```{r}
+vars <- compas_scores %>% 
+  select(sex, age, ends_with('count'), c_charge_degree, is_recid)
+
+# ggplot(vars, aes(x = race, y = decile_score)) + geom_boxplot()
+```
+
+### Training the Model
+
 ```{r}
 regmod <- glm(is_recid ~., family = binomial(link='logit'), data = vars)
 summary(regmod)
 fitted_values <- fitted(regmod)
-vars <- cbind(vars, fitted_values)
 ```
 
-## Using ProPublica's Bias-Assessment Model on Our Model
+### Parameter Tuning
+
+# Using ProPublica's Bias-Assessment Model on Our Model
+
+### Big TODO: we should nest this bias calculation inside cross-validation to make sure we're assessing our bias on future data (also interesting to look at the bias on the training data, however)
 
 We can see if our model suffers from the same bias using ProPublica's bias-assessment methodology. We'll set up the same model they did, but this time instead of predicting `score_factor` for the COMPAS score, we'll create a `score_factor` variable *from our model's predictions*.
 
-## Variable Selection
+First we create a new data frame with `new_score` as our risk or recidivism score (the fitted values from the model we trained above). We also create a `new_score_text` variable that defines score categories in the same way, but this time based on a 0-1 scale instead of a 0-10 scale. Recall ProPublica defined this category as: High=8-10, Medium=5-7, Low=1-4. Thus we'll do: High=0.75-1.0, Medium=0.45-0.75, Low=0-0.45.
 
-# Clustering
+```{r}
+our_scores <- compas_scores %>%
+  mutate(new_score = fitted_values) %>%
+  mutate(
+    new_score_text = as.factor(
+      ifelse(new_score >= 0.75, 'High',
+             ifelse(new_score >= 0.45, 'Medium', 'Low')))
+  )
+```
 
+Now we train the same bias-assessment model, this time using `new_score` instead of `decile_score` and `new_score_text` instead of `score_text`.
 
+```{r}
+new_df <- our_scores %>%
+  select(age, c_charge_degree, race, age_cat, new_score_text, sex, priors_count, days_b_screening_arrest, new_score, is_recid, two_year_recid, c_jail_in, c_jail_out) %>% 
+  filter(days_b_screening_arrest <= 30) %>%
+  filter(days_b_screening_arrest >= -30) %>%
+  filter(is_recid != -1) %>%
+  filter(c_charge_degree != "O") %>%
+  filter(new_score_text != 'N/A') %>%
+  mutate(crime_factor = factor(c_charge_degree)) %>%
+  mutate(age_factor = as.factor(age_cat)) %>%
+  within(age_factor <- relevel(age_factor, ref = 1)) %>%
+  mutate(race_factor = factor(race)) %>%
+  within(race_factor <- relevel(race_factor, ref = 3)) %>%
+  mutate(gender_factor = factor(sex, labels= c("Female","Male"))) %>%
+  within(gender_factor <- relevel(gender_factor, ref = 2)) %>%
+  mutate(score_factor = factor(new_score_text != "Low", labels = c("LowScore","HighScore")))
+```
+
+```{r}
+new_pp_model <- glm(
+  score_factor ~ gender_factor + age_factor + race_factor + priors_count + crime_factor + two_year_recid, 
+  family="binomial", 
+  data=new_df
+)
+```
+
+## Bias against black vs. white people
+
+```{r}
+model_intercept <- coef(new_pp_model)['(Intercept)']
+black_coef <- coef(new_pp_model)['race_factorAfrican-American']
+(relative_risk_black_v_white <- sigmoid(model_intercept + black_coef) / sigmoid(model_intercept))
+```
+
+## Bias against women vs. men
+
+```{r}
+woman_coef <- coef(new_pp_model)['gender_factorFemale']
+(relative_risk_woman_v_man <- sigmoid(model_intercept + woman_coef) / sigmoid(model_intercept))
+```
+
+## Bias against under 25 vs. middle-aged
+
+```{r}
+age_coef <- coef(new_pp_model)['age_factorLess than 25']
+(relative_risk_young_v_middleage <- sigmoid(model_intercept + age_coef) / sigmoid(model_intercept))
+```
 
 
 
