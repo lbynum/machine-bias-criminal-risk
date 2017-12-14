@@ -1,5 +1,5 @@
 ---
-title: "COMPAS Data Visualization"
+title: "Assessing and Mitigating Algorithmic Bias in Criminal Risk Scores"
 author: "Lucius Bynum, Preethi Seshadri"
 date: '19 November 2017'
 output:
@@ -165,14 +165,14 @@ There are three types of COMPAS score. Each measures a type of ‘risk’ associ
 We first load in the data provided by ProPublica, and take a quick look at summaries of each variable to get a sense of distribution and potential outliers. We'll look at half of the columns at a time to keep things manageable. 
 
 ```{r}
-compas_scores <- read.csv('compas-scores-two-years.csv')
-summary(compas_scores[1:(ncol(compas_scores)/2)])
+compas_data <- read.csv('compas-scores-two-years.csv')
+summary(compas_data[1:(ncol(compas_data)/2)])
 ```
 
 Here we notice there may be large outliers in many of the crime count variables, such as `juv_fel_count`, `juv_misd_count`, `juv_other_count`, and `priors_count`. We expect these are simply accurate observations corresponding to individuals with high numbers of prior offenses. Thus we will not remove these individuals from the data but will be aware of them as potential influential points when we later fit any models. We also note that the values for the 'days_from' variables are quite variable which may be relevant if we use those variables in later analysis. Looking at the second half of the columns, we have:
 
 ```{r}
-summary(compas_scores[(ncol(compas_scores)/2 + 1):ncol(compas_scores)])
+summary(compas_data[(ncol(compas_data)/2 + 1):ncol(compas_data)])
 ```
 
 With the second half we have similar characteristics as before. We remove the `violent_recid` column given that all values are `NA` (as mentioned in the data dictionary). Apart from that column, we make no other changes.
@@ -191,7 +191,7 @@ Next we use their code to perform this filtering:
 
 ```{r}
 # code from https://github.com/propublica/compas-analysis
-df <- compas_scores %>%
+df <- compas_data %>%
   select(age, c_charge_degree, race, age_cat, score_text, sex, priors_count, days_b_screening_arrest, decile_score, is_recid, two_year_recid, c_jail_in, c_jail_out) %>% 
   filter(days_b_screening_arrest <= 30) %>%
   filter(days_b_screening_arrest >= -30) %>%
@@ -288,7 +288,7 @@ age_coef <- coef(pp_model)['age_factorLess than 25']
 **TODO**: talk about excluding race but including sex
 
 ```{r}
-vars <- compas_scores %>% 
+vars <- compas_data %>% 
   select(sex, age, ends_with('count'), c_charge_degree, is_recid)
 
 # ggplot(vars, aes(x = race, y = decile_score)) + geom_boxplot()
@@ -313,7 +313,7 @@ We can see if our model suffers from the same bias using ProPublica's bias-asses
 First we create a new data frame with `new_score` as our risk or recidivism score (the fitted values from the model we trained above). We also create a `new_score_text` variable that defines score categories in the same way, but this time based on a 0-1 scale instead of a 0-10 scale. Recall ProPublica defined this category as: High=8-10, Medium=5-7, Low=1-4. Thus we'll do: High=0.75-1.0, Medium=0.45-0.75, Low=0-0.45.
 
 ```{r}
-our_scores <- compas_scores %>%
+our_scores <- compas_data %>%
   mutate(new_score = fitted_values) %>%
   mutate(
     new_score_text = as.factor(
@@ -371,6 +371,201 @@ woman_coef <- coef(new_pp_model)['gender_factorFemale']
 age_coef <- coef(new_pp_model)['age_factorLess than 25']
 (relative_risk_young_v_middleage <- sigmoid(model_intercept + age_coef) / sigmoid(model_intercept))
 ```
+
+# Mitigating Bias
+
+Much work has been done exploring techniques that allow for fair modeling and prediction in the presence of biased data or algorithms, and this area of study is rich and actively researched. Researchers Faisal Kamiran and Toon Calders, in their 2011 paper 
+"Data preprocessing techniques for classification without discrimination," describe several techniques that *alter the given dataset* to (ideally) eliminate the source of the bias. Several other techniques deal with modifying classification/regression algorithms themselves to make fairer predictions. Here, the general idea is to instead clean the bias out of the data, after which normal classification methods can be used. Before we discuss the techniques we employ for dealing with bias, we first introduce a few key concepts.
+
+#### Algorithmic Bias
+
+[This Wikipedia article](https://en.wikipedia.org/wiki/Algorithmic_bias) provides a nice overview of different types of Algorithmic bias and several examples. Bias can manifest in an algorithm in various ways and can have multiple causes. The Wikipedia article linked above uses to term "pre-existing bias" to loosely describe a type of bias resulting from baking social or institutional biases into algorithms. Here the source of bias is not necessarily the algorithm but instead the values encoded into it by its creators or by the data it sees. For our brief foray into algorithmic bias here, we focus on this type of bias under the assumption that some underlying bias does exist in the United States criminal justice system and thus in our data set. 
+
+#### Protected/Sensitive Attributes
+
+The term *protected attribute* or *sensitive attribute* typically refers to a discriptor of an individual upon which it is illegal to discriminate under the Fair Work Act. These include characteristics such as sexual orientation, gender identity, and race. 
+
+#### Combatting Algorithmic Bias
+
+Broadly speaking, research in algorithmic bias works to (1) identify where and in what way bias is present (ProPublica's analysis is one such example), (2) come up with ways to constrain models to enforce fair predictions, or (3) alter the underlying data to minimize bias in the data itself. For our recidivism predictions, we'll employ some techniques from category 3 -- altering the underlying data -- based on Kamiran and Calders' work.
+
+## Mitigating Bias Through Data Preprocessing
+
+Kamiran and Calders outline four types of techniques for preprocessing to mitigate bias, described at length in their paper:
+
+1. **Suppression:** Given a sensitive attribute S, find and remove S and the other features most correlated with S.
+2. **Massaging the dataset:** Given a sensitive attribute S, swap the labels of some observations with differing values for S to decrease discrimination while maintaining the same overall class distribution. 
+3. **Reweighing:** Up- or down-weight observations in the training data based on whether they have an under- or over-represented combinations of sensitive attribute S and the response variable.  
+4. **Sampling:** Calculate sample sizes for combinations of sensitive attribute S and the response that would, as Kamiran and Calders put it, "make the dataset descrimination-free." Then under- or over-sample observations accordingly to create a data set with those proportions.  
+
+Here we focus on Sampling. 
+
+### Applying Sampling to the COMPAS Data
+
+To narrow the scope of this report, we focus on *racial bias* against black people as compared to white people, and we implement sampling to combat this type of bias only. If our example words for racial bias, we could theoretically extend it to each of the protected attributes in the data.
+
+First we need to establish what the class imbalance is between blacks and whites in our data. We look for an imbalance in terms of recidivism rates, since recidivism is what our model predicts.
+
+```{r}
+(recid_rates <- compas_data %>%
+  select(race, is_recid) %>%
+  group_by(race) %>%
+  summarize(yes_recid = sum(is_recid == 1), no_recid = sum(is_recid == 0)))
+```
+
+Focusing on African-Americans and Caucasians and plotting this table as a bar chart, we have:
+
+```{r}
+compas_data %>%
+  filter(race %in% c('African-American', 'Caucasian')) %>%
+  ggplot(aes(x = is_recid, color = race)) + 
+    geom_histogram(bins = 2) +
+    facet_wrap(~ race)
+```
+
+Kamiran and Calders define four types of observation with respect to a protected attribute and a class label. Their definitions are as follows:
+
+- Deprived community with positive class labels (DP)
+- Deprived community with negative class labels (DN)
+- Favored community with positive class labels (FP)
+- Favored community with negative class labels (FN)
+
+In our case these correspond to:
+
+- DP: African-Americans with `is_recid` = 1
+- DN: African-Americans with `is_recid` = 0
+- FP: Caucasians with `is_recid` = 1
+- FN: Caucasians with `is_recid` = 0
+
+```{r}
+DP_data <- compas_data %>%
+  filter(race == 'African-American' & is_recid == 1)
+DN_data <- compas_data %>%
+  filter(race == 'African-American' & is_recid == 0)
+FP_data <- compas_data %>%
+  filter(race == 'Caucasian' & is_recid == 1)
+FN_data <- compas_data %>%
+  filter(race == 'Caucasian' & is_recid == 0)
+```
+
+The process for sampling to get a non-discrimatory sample is as follows.
+
+#### 1. Compute the expected size for each group if the data were non-discriminatory
+    
+Here we have the following counts for each group:
+
+```{r}
+recid_rates %>% filter(race %in% c('African-American', 'Caucasian'))
+```
+
+Thus we'll say the expected number of observations for each group is the mean of the four counts:
+
+```{r}
+(expected_num_observations <- mean(c(nrow(DP_data), nrow(DN_data), nrow(FP_data), nrow(FN_data))))
+```
+
+#### 2. Under- and Over-sample to eliminate descrimination
+
+We want equal representation for each group (DP, DN, FP, and FN). This means getting `r expected_num_observations` observations of each. We under- or over-sample accordingly. Kamiran and Calders describe two methods for performing this sampling: *Preferential Sampling*, which is more likely to sample boundary observations (with a high probability of being in either class); and *Uniform Sampling*, which samples all points with equal probability. Here we perform Uniform Sampling with replacement. 
+
+```{r}
+set.seed(123)
+# sample indices
+DP_sampled_indices <- sample(1:nrow(DP_data), size = expected_num_observations, replace = TRUE)
+DN_sampled_indices <- sample(1:nrow(DN_data), size = expected_num_observations, replace = TRUE)
+FP_sampled_indices <- sample(1:nrow(FP_data), size = expected_num_observations, replace = TRUE)
+FN_sampled_indices <- sample(1:nrow(FN_data), size = expected_num_observations, replace = TRUE)
+```
+
+And we build a new data set from the sampled observations.
+
+```{r}
+# build a new data set
+sampled_compas_data <- rbind(
+  DP_data[DP_sampled_indices,],
+  DN_data[DN_sampled_indices,],
+  FP_data[FP_sampled_indices,],
+  FN_data[FN_sampled_indices,]
+)
+```
+
+We double check visually that our sampling successfully leveled the classes for each partition.
+
+```{r}
+sampled_compas_data %>%
+  filter(race %in% c('African-American', 'Caucasian')) %>%
+  ggplot(aes(x = is_recid, color = race)) + 
+    geom_histogram(bins = 2) +
+    facet_wrap(~ race)
+```
+
+With Uniform Sampling applied to our data for the *black/white* protected race attributes, we're ready to train our model again and see (1) if its level of bias has decreased and also see (2) how its predictive accuracy has changed. 
+
+#### 3. Train the model on the sampled data
+
+Here we'll train the model following the same process from above and see how our bias (measured by ProPublica's methodology) compares to the bias before sampling.
+
+```{r}
+vars <- sampled_compas_data %>% 
+  select(sex, age, ends_with('count'), c_charge_degree, is_recid)
+post_sample_regmod <- glm(is_recid ~., family = binomial(link='logit'), data = vars)
+summary(post_sample_regmod)
+```
+
+```{r}
+fitted_values <- fitted(post_sample_regmod)
+post_sample_scores <- sampled_compas_data %>%
+  mutate(new_score = fitted_values) %>%
+  mutate(
+    new_score_text = as.factor(
+      ifelse(new_score >= 0.75, 'High',
+             ifelse(new_score >= 0.45, 'Medium', 'Low'))))
+```
+
+```{r}
+post_sample_df <- post_sample_scores %>%
+  select(age, c_charge_degree, race, age_cat, new_score_text, sex, priors_count, days_b_screening_arrest, new_score, is_recid, two_year_recid, c_jail_in, c_jail_out) %>% 
+  filter(days_b_screening_arrest <= 30) %>%
+  filter(days_b_screening_arrest >= -30) %>%
+  filter(is_recid != -1) %>%
+  filter(c_charge_degree != "O") %>%
+  filter(new_score_text != 'N/A') %>%
+  mutate(crime_factor = factor(c_charge_degree)) %>%
+  mutate(age_factor = as.factor(age_cat)) %>%
+  within(age_factor <- relevel(age_factor, ref = '25 - 45')) %>%
+  mutate(race_factor = factor(race)) %>%
+  within(race_factor <- relevel(race_factor, ref = 'Caucasian')) %>%
+  mutate(gender_factor = factor(sex, labels= c("Female","Male"))) %>%
+  within(gender_factor <- relevel(gender_factor, ref = 'Male')) %>%
+  mutate(score_factor = factor(new_score_text != "Low", labels = c("LowScore","HighScore")))
+```
+
+```{r}
+post_sample_pp_model <- glm(
+  score_factor ~ gender_factor + age_factor + race_factor + priors_count + crime_factor + two_year_recid, 
+  family="binomial", 
+  data=post_sample_df
+)
+```
+
+```{r}
+model_intercept <- coef(post_sample_pp_model)['(Intercept)']
+black_coef <- coef(post_sample_pp_model)['race_factorAfrican-American']
+(post_sample_relative_risk_black_v_white <- sigmoid(model_intercept + black_coef) / sigmoid(model_intercept))
+```
+
+We are able to decrease the bias in relative risk by:
+
+```{r}
+1 - post_sample_relative_risk_black_v_white / relative_risk_black_v_white
+```
+
+
+
+
+
+
+
 
 
 
