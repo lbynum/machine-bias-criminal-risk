@@ -2,12 +2,12 @@
 title: "Assessing and Mitigating Algorithmic Bias in Criminal Risk Scores"
 author: "Lucius Bynum, Preethi Seshadri"
 date: '19 November 2017'
-output:
-  html_document:
-    theme: journal
-    highlight: tango
-    df_print: paged
-# output: pdf_document
+# output:
+  # html_document:
+  #   theme: journal
+  #   highlight: tango
+  #   df_print: paged
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
