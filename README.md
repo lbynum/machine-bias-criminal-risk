@@ -15,11 +15,6 @@
 	of assessing bias while performing our own additional exploratory analysis and building our 
 	own model. More specifically, we will do the following:
 	
-	**Exploratory Data Analysis**: Perform clustering (using partitional and/or hierarchical 
-	clustering techniques) to understand the structure of the COMPAS data and see if any 
-	interesting features drive the clusters or if we can 	visually see different ‘levels of 
-	risk’ (in terms of recidivism) in the clustered data.
-	
 	**Building Our Own Model**: ProPublica’s analysis (1) creates a logistic regression to 
 	analyze which features contribute most to the COMPAS score, and (2) uses a Cox proportional 
 	hazards model to measure how accurate the COMPAS predictions are (i.e. how often did people 
@@ -47,16 +42,4 @@
 	vr_charge_degree, vr_offense_date, vr_charge_desc, type_of_assessment, decile_score, score_text, 
 	screening_date, v_type_of_assessment, v_decile_score, v_score_text, v_screening_date, in_custody, 
 	out_custody, priors_count, start, end, event, two_year_recid
-
-
-## End Product:
-	Our end product will be a set of visualizations/graphs relating to our exploratory data analysis 
-	as well as a statistical model (we’re tentatively thinking logistic regression). Along with our 
-	visualizations and model, we will provide a narrative to explain our process and findings, 
-	particularly in regards to how our predictive performance relates to the COMPAS score and potential 
-	bias in our model. Having access to the model (instead of it being a black box, as with the COMPAS 
-	model) might also allow us to gain insight into different sources of bias related to this problem. 
-	Potential topics to investigate include the frequency of hate crimes over time, the distribution 
-	of hate crimes geographically, and the types of hate crimes that have occurred over this period 
-	(using semantic analysis approaches on the summaries). 
 
