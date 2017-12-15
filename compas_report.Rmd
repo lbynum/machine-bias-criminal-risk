@@ -298,7 +298,9 @@ Now we train the same bias-assessment model, this time using `new_score` instead
 
 ```{r}
 new_df <- our_scores %>%
-  select(age, c_charge_degree, race, age_cat, new_score_text, sex, priors_count, days_b_screening_arrest, new_score, is_recid, two_year_recid, c_jail_in, c_jail_out) %>% 
+  select(age, c_charge_degree, race, age_cat, new_score_text, sex, 
+         priors_count, days_b_screening_arrest, new_score, is_recid, 
+         two_year_recid, c_jail_in, c_jail_out) %>% 
   filter(days_b_screening_arrest <= 30) %>%
   filter(days_b_screening_arrest >= -30) %>%
   filter(is_recid != -1) %>%
@@ -316,7 +318,8 @@ new_df <- our_scores %>%
 
 ```{r}
 new_pp_model <- glm(
-  score_factor ~ gender_factor + age_factor + race_factor + priors_count + crime_factor + two_year_recid, 
+  score_factor ~ gender_factor + age_factor + race_factor + priors_count + 
+    crime_factor + two_year_recid, 
   family="binomial", 
   data=new_df
 )
@@ -612,14 +615,14 @@ black_coef <- coef(post_sample_pp_model)['race_factorAfrican-American']
 (post_sample_risk_black_v_white <- sigmoid(model_intercept + black_coef) / sigmoid(model_intercept))
 ```
 
-Taking the ratio and subtracting from 1, we were able to decrease the bias in relative risk by:
+Taking the ratio and subtracting from 1, we compute the change in relative risk before and after:
 
 ```{r}
 pre_sample_risk_black_v_white <- relative_risk_black_v_white
 1 - post_sample_risk_black_v_white / pre_sample_risk_black_v_white
 ```
 
-Unfortunately, it looks like sampling did not help with our level of bias. the level of bias is about the same before and after -- the slight difference we see here could simply be due to variation in the cross-validation process. Though our preliminary bias-mitigation technique was not successful in this instance, this fact still gives us insight into bias in the COMPAS data. There are still some important takeaways we can draw from our experimentation.
+Unfortunately, it looks like sampling did not help with our level of bias. The level of bias is about the same before and after -- the slight difference we see here could simply be due to variation in the cross-validation process. Though our preliminary bias-mitigation technique was not successful in this instance, this fact still gives us insight into bias in the COMPAS data. There are still some important takeaways we can draw from our experimentation, discussed in the next section.
 
 # Takeaways
 
