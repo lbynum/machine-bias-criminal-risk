@@ -3,10 +3,10 @@ title: "Assessing and Mitigating Algorithmic Bias in Criminal Risk Scores"
 author: "Lucius Bynum, Preethi Seshadri"
 date: '19 November 2017'
 # output:
-  # html_document:
-  #   theme: journal
-  #   highlight: tango
-  #   df_print: paged
+# html_document:
+#   theme: journal
+#   highlight: tango
+#   df_print: paged
 output: pdf_document
 ---
 
@@ -18,6 +18,7 @@ library(dplyr)
 library(GGally)
 library(ggplot2)
 library(e1071)
+library(caret)
 ```
 
 # Introduction
@@ -207,11 +208,11 @@ In order to use this data to assess racial bias in scoring, the ProPublica analy
 # code from https://github.com/propublica/compas-analysis
 df <- mutate(df, crime_factor = factor(c_charge_degree)) %>%
       mutate(age_factor = as.factor(age_cat)) %>%
-      within(age_factor <- relevel(age_factor, ref = 1)) %>%
+      within(age_factor <- relevel(age_factor, ref = "25 - 45")) %>%
       mutate(race_factor = factor(race)) %>%
-      within(race_factor <- relevel(race_factor, ref = 3)) %>%
+      within(race_factor <- relevel(race_factor, ref = "Caucasian")) %>%
       mutate(gender_factor = factor(sex, labels= c("Female","Male"))) %>%
-      within(gender_factor <- relevel(gender_factor, ref = 2)) %>%
+      within(gender_factor <- relevel(gender_factor, ref = "Male")) %>%
       mutate(score_factor = factor(score_text != "Low", labels = c("LowScore","HighScore")))
 ```
 
@@ -299,7 +300,7 @@ vars <- compas_data %>%
 ```{r}
 regmod <- glm(is_recid ~., family = binomial(link='logit'), data = vars)
 summary(regmod)
-fitted_values <- fitted(regmod)
+# fitted_values <- fitted(regmod)
 ```
 
 ### Parameter Tuning
@@ -308,13 +309,38 @@ fitted_values <- fitted(regmod)
 
 ### Big TODO: we should nest this bias calculation inside cross-validation to make sure we're assessing our bias on future data (also interesting to look at the bias on the training data, however)
 
-We can see if our model suffers from the same bias using ProPublica's bias-assessment methodology. We'll set up the same model they did, but this time instead of predicting `score_factor` for the COMPAS score, we'll create a `score_factor` variable *from our model's predictions*.
-
-First we create a new data frame with `new_score` as our risk or recidivism score (the fitted values from the model we trained above). We also create a `new_score_text` variable that defines score categories in the same way, but this time based on a 0-1 scale instead of a 0-10 scale. Recall ProPublica defined this category as: High=8-10, Medium=5-7, Low=1-4. Thus we'll do: High=0.75-1.0, Medium=0.45-0.75, Low=0-0.45.
+We can see if our model suffers from the same bias using ProPublica's bias-assessment methodology. We'll set up the same model they did, but this time instead of predicting `score_factor` for the COMPAS score, we'll create a `score_factor` variable *from our model's predictions*. To get valid predictions for the training data, we use 10-fold cross-validation.
 
 ```{r}
+set.seed(123)
+all_predictions <- data.frame(id = compas_data$id, predicted_score = NA)
+  
+# split the data into 10 folds
+all_indices <- 1:nrow(compas_data)
+folds <- createFolds(all_indices, k = 10)
+
+for (i in 1:10) {
+  # make train/test split
+  test_indices <- folds[[i]]
+  training_indices <- all_indices[-test_indices]
+  test_data <- compas_data[test_indices,]
+  training_data <- compas_data[training_indices,]
+  # build model on training data
+  vars <- training_data %>% 
+    select(sex, age, ends_with('count'), c_charge_degree, is_recid)
+  regmod <- glm(is_recid ~., family = binomial(link='logit'), data = vars)
+  # store predictions on test data
+  predicted_scores <- predict(regmod, newdata = test_data, type = 'response')
+  all_predictions[names(predicted_scores),]$predicted_score <- predicted_scores
+}
+```
+
+Next we create a new data frame with `new_score` as our risk of recidivism score. We also create a `new_score_text` variable that defines score categories in the same way, but this time based on a 0-1 scale instead of a 0-10 scale. Recall ProPublica defined this category as: High=8-10, Medium=5-7, Low=1-4. Thus we'll do: High=0.75-1.0, Medium=0.45-0.75, Low=0-0.45.
+
+```{r}
+predicted_scores <- all_predictions$predicted_score
 our_scores <- compas_data %>%
-  mutate(new_score = fitted_values) %>%
+  mutate(new_score = predicted_scores) %>%
   mutate(
     new_score_text = as.factor(
       ifelse(new_score >= 0.75, 'High',
@@ -334,11 +360,11 @@ new_df <- our_scores %>%
   filter(new_score_text != 'N/A') %>%
   mutate(crime_factor = factor(c_charge_degree)) %>%
   mutate(age_factor = as.factor(age_cat)) %>%
-  within(age_factor <- relevel(age_factor, ref = 1)) %>%
+  within(age_factor <- relevel(age_factor, ref = "25 - 45")) %>%
   mutate(race_factor = factor(race)) %>%
-  within(race_factor <- relevel(race_factor, ref = 3)) %>%
+  within(race_factor <- relevel(race_factor, ref = "Caucasian")) %>%
   mutate(gender_factor = factor(sex, labels= c("Female","Male"))) %>%
-  within(gender_factor <- relevel(gender_factor, ref = 2)) %>%
+  within(gender_factor <- relevel(gender_factor, ref = "Male")) %>%
   mutate(score_factor = factor(new_score_text != "Low", labels = c("LowScore","HighScore")))
 ```
 
@@ -400,7 +426,7 @@ Kamiran and Calders outline four types of techniques for preprocessing to mitiga
 
 Here we focus on Sampling. 
 
-### Applying Sampling to the COMPAS Data
+### Applying Sampling to the COMPAS Data to Combat Racial Bias
 
 To narrow the scope of this report, we focus on *racial bias* against black people as compared to white people, and we implement sampling to combat this type of bias only. If our example words for racial bias, we could theoretically extend it to each of the protected attributes in the data.
 
@@ -450,6 +476,26 @@ FN_data <- compas_data %>%
 
 The process for sampling to get a non-discrimatory sample is as follows.
 
+1. Compute the expected size for each group if the data were non-discriminatory
+2. Under- and over-sample accordingly to eliminate descrimination
+3. Train the model on the sampled data
+
+In order to get an estimation of how biased our model is after making this adjustment to the data, we nest this process in cross-validation. Thus our overall process will be the following (using k-fold cross-validation).
+
+1. Split the data into k folds
+2. Hold out one fold as test data, use the remaining k-1 folds as training data
+3. Perform sampling on the training data
+    - Compute the expected size for each group if the data were non-discriminatory
+    - Under- and over-sample accordingly to eliminate descrimination
+4. Train our model on the training data
+5. Predict recidivism scores on the test data and store predictions
+6. Repeat (2) - (5) for each fold, getting one prediction for each data point
+7. Compute relative risk with new predictions
+
+First we walk through an example of the sampling process on the whole data set before embedding the enitre process in cross-validation.
+
+### Demonstration of the sampling process
+
 #### 1. Compute the expected size for each group if the data were non-discriminatory
     
 Here we have the following counts for each group:
@@ -464,7 +510,7 @@ Thus we'll say the expected number of observations for each group is the mean of
 (expected_num_observations <- mean(c(nrow(DP_data), nrow(DN_data), nrow(FP_data), nrow(FN_data))))
 ```
 
-#### 2. Under- and Over-sample to eliminate descrimination
+#### 2. Under- and over-sample to eliminate descrimination
 
 We want equal representation for each group (DP, DN, FP, and FN). This means getting `r expected_num_observations` observations of each. We under- or over-sample accordingly. Kamiran and Calders describe two methods for performing this sampling: *Preferential Sampling*, which is more likely to sample boundary observations (with a high probability of being in either class); and *Uniform Sampling*, which samples all points with equal probability. Here we perform Uniform Sampling with replacement. 
 
@@ -505,24 +551,80 @@ With Uniform Sampling applied to our data for the *black/white* protected race a
 
 Here we'll train the model following the same process from above and see how our bias (measured by ProPublica's methodology) compares to the bias before sampling.
 
+We train our logistic regression model.
+
 ```{r}
 vars <- sampled_compas_data %>% 
   select(sex, age, ends_with('count'), c_charge_degree, is_recid)
 post_sample_regmod <- glm(is_recid ~., family = binomial(link='logit'), data = vars)
-summary(post_sample_regmod)
 ```
 
+Next we would predict scores **for observations we haven't seen**. Given that we didn't hold out a test set, we don't have any such observations. However, we have now seen how sampling works and are thus ready to do so within cross-validation. 
+
+### Sampling with Cross-validation 
+
+Given that we have seen most of the following process step by step in previous sections, we implement this section without explanation of those parts we have seen already.
+
 ```{r}
-fitted_values <- fitted(post_sample_regmod)
-post_sample_scores <- sampled_compas_data %>%
-  mutate(new_score = fitted_values) %>%
+set.seed(123)
+all_predictions <- data.frame(id = compas_data$id, predicted_score = NA)
+  
+#### 1. Split the data into 10 folds
+all_indices <- 1:nrow(compas_data)
+folds <- createFolds(all_indices, k = 10)
+
+#### 2. Hold out one fold as test data, use the remaining k-1 folds as training data
+for (i in 1:10) {
+  test_indices <- folds[[i]]
+  training_indices <- all_indices[-test_indices]
+  test_data <- compas_data[test_indices,]
+  training_data <- compas_data[training_indices,]
+  
+  #### 3. Perform sampling on the training data
+  # create partitions
+  DP_data <- training_data %>%
+    filter(race == 'African-American' & is_recid == 1)
+  DN_data <- training_data %>%
+    filter(race == 'African-American' & is_recid == 0)
+  FP_data <- training_data %>%
+    filter(race == 'Caucasian' & is_recid == 1)
+  FN_data <- training_data %>%
+    filter(race == 'Caucasian' & is_recid == 0)
+  # get expected number of observations
+  expected_num_observations <- mean(c(nrow(DP_data), nrow(DN_data), nrow(FP_data), nrow(FN_data)))
+  # under- and over-sample to eliminate descrimination
+  DP_sampled_indices <- sample(1:nrow(DP_data), size = expected_num_observations, replace = TRUE)
+  DN_sampled_indices <- sample(1:nrow(DN_data), size = expected_num_observations, replace = TRUE)
+  FP_sampled_indices <- sample(1:nrow(FP_data), size = expected_num_observations, replace = TRUE)
+  FN_sampled_indices <- sample(1:nrow(FN_data), size = expected_num_observations, replace = TRUE)
+  # build new data set
+  sampled_training_data <- rbind(
+    DP_data[DP_sampled_indices,],
+    DN_data[DN_sampled_indices,],
+    FP_data[FP_sampled_indices,],
+    FN_data[FN_sampled_indices,]
+  )
+  
+  #### 4. Train our model on the training data
+  vars <- sampled_training_data %>% 
+    select(sex, age, ends_with('count'), c_charge_degree, is_recid)
+  post_sample_regmod <- glm(is_recid ~., family = binomial(link='logit'), data = vars)
+  
+  #### 5. Predict recidivism scores on the test data and store predictions
+  predicted_scores <- predict(post_sample_regmod, newdata = test_data, type = 'response')
+  all_predictions[names(predicted_scores),]$predicted_score <- predicted_scores
+}
+#### 7. Compute relative risk with new predictions
+# turn predictions from log odds ratios into probabilities of recidivating
+recidivism_scores <- all_predictions$predicted_score
+# create new scores and score categories
+post_sample_scores <- compas_data %>%
+  mutate(new_score = recidivism_scores) %>%
   mutate(
     new_score_text = as.factor(
       ifelse(new_score >= 0.75, 'High',
              ifelse(new_score >= 0.45, 'Medium', 'Low'))))
-```
-
-```{r}
+# build ProPublica's data frame with our scores
 post_sample_df <- post_sample_scores %>%
   select(age, c_charge_degree, race, age_cat, new_score_text, sex, priors_count, days_b_screening_arrest, new_score, is_recid, two_year_recid, c_jail_in, c_jail_out) %>% 
   filter(days_b_screening_arrest <= 30) %>%
@@ -532,21 +634,25 @@ post_sample_df <- post_sample_scores %>%
   filter(new_score_text != 'N/A') %>%
   mutate(crime_factor = factor(c_charge_degree)) %>%
   mutate(age_factor = as.factor(age_cat)) %>%
-  within(age_factor <- relevel(age_factor, ref = '25 - 45')) %>%
+  within(age_factor <- relevel(age_factor, ref = "25 - 45")) %>%
   mutate(race_factor = factor(race)) %>%
-  within(race_factor <- relevel(race_factor, ref = 'Caucasian')) %>%
+  within(race_factor <- relevel(race_factor, ref = "Caucasian")) %>%
   mutate(gender_factor = factor(sex, labels= c("Female","Male"))) %>%
-  within(gender_factor <- relevel(gender_factor, ref = 'Male')) %>%
+  within(gender_factor <- relevel(gender_factor, ref = "Male")) %>%
   mutate(score_factor = factor(new_score_text != "Low", labels = c("LowScore","HighScore")))
-```
-
-```{r}
+# train ProPublica's model
 post_sample_pp_model <- glm(
-  score_factor ~ gender_factor + age_factor + race_factor + priors_count + crime_factor + two_year_recid, 
-  family="binomial", 
+  score_factor ~ gender_factor + age_factor + race_factor + priors_count + crime_factor + two_year_recid,
+  family="binomial",
   data=post_sample_df
 )
 ```
+
+Now we can measure the amount of bias in our model after applying sampling and compare to the bias before.
+
+### Bias Before and After Sampling
+
+We can re-compute the relative risk for blacks vs. whites and compare it to the relative risk for our model before sampling to see if sampling improved the level of bias in our mode.
 
 ```{r}
 model_intercept <- coef(post_sample_pp_model)['(Intercept)']
@@ -554,11 +660,15 @@ black_coef <- coef(post_sample_pp_model)['race_factorAfrican-American']
 (post_sample_relative_risk_black_v_white <- sigmoid(model_intercept + black_coef) / sigmoid(model_intercept))
 ```
 
-We are able to decrease the bias in relative risk by:
+Taking the ratio and subtracting from 1, we were able to decrease the bias in relative risk by:
 
 ```{r}
-1 - post_sample_relative_risk_black_v_white / relative_risk_black_v_white
+pre_sample_relative_risk_black_v_white <- 1.5
+1 - post_sample_relative_risk_black_v_white / pre_sample_relative_risk_black_v_white
 ```
+
+# References
+
 
 
 
