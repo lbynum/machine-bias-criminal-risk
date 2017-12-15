@@ -2,16 +2,16 @@
 title: "Assessing and Mitigating Algorithmic Bias in Criminal Risk Scores"
 author: "Lucius Bynum, Preethi Seshadri"
 date: '19 November 2017'
-# output:
-# html_document:
-#   theme: journal
-#   highlight: tango
-#   df_print: paged
-output: pdf_document
+output:
+  html_document:
+    theme: journal
+    highlight: tango
+    df_print: paged
+# output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, cache=TRUE)
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, cache=FALSE)
 options(digits=4)
 
 library(dplyr)
@@ -282,34 +282,11 @@ age_coef <- coef(pp_model)['age_factorLess than 25']
 (relative_risk_young_v_middleage <- sigmoid(model_intercept + age_coef) / sigmoid(model_intercept))
 ```
 
-## Our Logistic Regression Model
+# Our Logistic Regression Model
 
-### Variable Selection
+# Comparing Our Model's Predictive Performance to the COMPAS Model
 
-**TODO**: talk about excluding race but including sex
-
-```{r}
-vars <- compas_data %>% 
-  select(sex, age, ends_with('count'), c_charge_degree, is_recid)
-
-# ggplot(vars, aes(x = race, y = decile_score)) + geom_boxplot()
-```
-
-### Training the Model
-
-```{r}
-regmod <- glm(is_recid ~., family = binomial(link='logit'), data = vars)
-summary(regmod)
-# fitted_values <- fitted(regmod)
-```
-
-### Parameter Tuning
-
-# Using ProPublica's Bias-Assessment Model on Our Model
-
-### Big TODO: we should nest this bias calculation inside cross-validation to make sure we're assessing our bias on future data (also interesting to look at the bias on the training data, however)
-
-We can see if our model suffers from the same bias using ProPublica's bias-assessment methodology. We'll set up the same model they did, but this time instead of predicting `score_factor` for the COMPAS score, we'll create a `score_factor` variable *from our model's predictions*. To get valid predictions for the training data, we use 10-fold cross-validation.
+To get valid predictions for the training data, we use 10-fold cross-validation.
 
 ```{r}
 set.seed(123)
@@ -333,12 +310,15 @@ for (i in 1:10) {
   predicted_scores <- predict(regmod, newdata = test_data, type = 'response')
   all_predictions[names(predicted_scores),]$predicted_score <- predicted_scores
 }
+predicted_scores <- all_predictions$predicted_score
+confusionMatrix(data = as.numeric(predicted_scores > 0.5), reference = compas_data$is_recid)
 ```
 
-Next we create a new data frame with `new_score` as our risk of recidivism score. We also create a `new_score_text` variable that defines score categories in the same way, but this time based on a 0-1 scale instead of a 0-10 scale. Recall ProPublica defined this category as: High=8-10, Medium=5-7, Low=1-4. Thus we'll do: High=0.75-1.0, Medium=0.45-0.75, Low=0-0.45.
+# Using ProPublica's Bias-Assessment Model on Our Model
+
+We can see if our model suffers from the same bias using ProPublica's bias-assessment methodology. We'll set up the same model they did, but this time instead of predicting `score_factor` for the COMPAS score, we'll create a `score_factor` variable *from our model's predictions*. We create a new data frame with `new_score` as our risk of recidivism score. We also create a `new_score_text` variable that defines score categories in the same way, but this time based on a 0-1 scale instead of a 0-10 scale. Recall ProPublica defined this category as: High=8-10, Medium=5-7, Low=1-4. Thus we'll do: High=0.75-1.0, Medium=0.45-0.75, Low=0-0.45.
 
 ```{r}
-predicted_scores <- all_predictions$predicted_score
 our_scores <- compas_data %>%
   mutate(new_score = predicted_scores) %>%
   mutate(
@@ -384,19 +364,19 @@ black_coef <- coef(new_pp_model)['race_factorAfrican-American']
 (relative_risk_black_v_white <- sigmoid(model_intercept + black_coef) / sigmoid(model_intercept))
 ```
 
-## Bias against women vs. men
+<!-- ## Bias against women vs. men -->
 
-```{r}
-woman_coef <- coef(new_pp_model)['gender_factorFemale']
-(relative_risk_woman_v_man <- sigmoid(model_intercept + woman_coef) / sigmoid(model_intercept))
-```
+<!-- ```{r} -->
+<!-- woman_coef <- coef(new_pp_model)['gender_factorFemale'] -->
+<!-- (relative_risk_woman_v_man <- sigmoid(model_intercept + woman_coef) / sigmoid(model_intercept)) -->
+<!-- ``` -->
 
-## Bias against under 25 vs. middle-aged
+<!-- ## Bias against under 25 vs. middle-aged -->
 
-```{r}
-age_coef <- coef(new_pp_model)['age_factorLess than 25']
-(relative_risk_young_v_middleage <- sigmoid(model_intercept + age_coef) / sigmoid(model_intercept))
-```
+<!-- ```{r} -->
+<!-- age_coef <- coef(new_pp_model)['age_factorLess than 25'] -->
+<!-- (relative_risk_young_v_middleage <- sigmoid(model_intercept + age_coef) / sigmoid(model_intercept)) -->
+<!-- ``` -->
 
 # Mitigating Bias
 
@@ -663,7 +643,7 @@ black_coef <- coef(post_sample_pp_model)['race_factorAfrican-American']
 Taking the ratio and subtracting from 1, we were able to decrease the bias in relative risk by:
 
 ```{r}
-pre_sample_relative_risk_black_v_white <- 1.5
+pre_sample_relative_risk_black_v_white <- relative_risk_black_v_white
 1 - post_sample_relative_risk_black_v_white / pre_sample_relative_risk_black_v_white
 ```
 
