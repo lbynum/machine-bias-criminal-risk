@@ -626,6 +626,15 @@ Unfortunately, it looks like sampling did not help with our level of bias. The l
 
 # Takeaways
 
+In this section we discuss what we think are the major takeaways from the above analysis. Some of these observations here are based on direct results from above while others are based on our best hypotheses about bias in this data given the results we saw. 
+
+One important takeaway from our use of sampling and the fact that the level of bias did not change before and after is that bias can permeate features other than protected attributes. We performed sampling for one variable -- the race variable -- but were unable to decrease racial bias. This could suggest that other features in the data served as proxies for race, so despite the fact that we created balance between recidivate and non-recidivate observations between blacks and whites, the presence racial bias across other features still drove the racial bias in our model. This occurrence is consistent with some techniques from the literature suggested for minimizing algorithmic bias, such as suppression, which we saw among Kamiran and Calders’ four suggested techniques. 
+
+Another takeaway is that using only the most basic features about defendants (instead of a detailed survey of variables, as used by COMPAS), as compared to the COMPAS risk of recidivism scores, we were able to produce a model with higher accuracy and lower levels of bias (both estimated via cross-validation). Our analysis certainly did not provide a comprehensive comparison, and COMPAS scores may be superior in many ways to our risk scores; however, the difference in performance and bias that we saw, given how simple our model is, suggests that COMPAS scores could be significantly improved.
+
+# Future Work
+
+To continue this project, there are several areas upon which we would expand. In addition to generating risk of recidivism scores, we would also explore risk of violent recidivism and perform a similar comparison to COMPAS scores as above. We would also work to improve our risk of recidivism models in terms of feature generation and accuracy and try other modeling approaches in addition to logistic regression. There is also much work to be done in eliminating bias from these models. While our attempt via uniform sampling did not work, there are several other techniques for data preprocessing (such as those mentioned in the report) to eliminate bias that could be more fruitful. Furthermore, we did not explore any methods that impose fairness constraints on the models themselves. A hybrid approach that does both may be necessary to successfully minimize bias. It would also be interesting to do a more in depth exploration of the trade-off between bias and performance and see how this trade-off manifests in predictions from the COMPAS data.
 
 # References
 
