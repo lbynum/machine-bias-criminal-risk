@@ -284,33 +284,10 @@ age_coef <- coef(pp_model)['age_factorLess than 25']
 
 ## Our Logistic Regression Model
 
-### Variable Selection
+# Comparing our model's predictive performance to the COMPAS model
+TODO: Mention Compas accuracy
 
-**TODO**: talk about excluding race but including sex
-
-```{r}
-vars <- compas_data %>% 
-  select(sex, age, ends_with('count'), c_charge_degree, is_recid)
-
-# ggplot(vars, aes(x = race, y = decile_score)) + geom_boxplot()
-```
-
-### Training the Model
-
-```{r}
-regmod <- glm(is_recid ~., family = binomial(link='logit'), data = vars)
-summary(regmod)
-# fitted_values <- fitted(regmod)
-```
-
-### Parameter Tuning
-
-# Using ProPublica's Bias-Assessment Model on Our Model
-
-### Big TODO: we should nest this bias calculation inside cross-validation to make sure we're assessing our bias on future data (also interesting to look at the bias on the training data, however)
-
-We can see if our model suffers from the same bias using ProPublica's bias-assessment methodology. We'll set up the same model they did, but this time instead of predicting `score_factor` for the COMPAS score, we'll create a `score_factor` variable *from our model's predictions*. To get valid predictions for the training data, we use 10-fold cross-validation.
-
+To get valid predictions for the training data, we use 10-fold cross-validation.
 ```{r}
 set.seed(123)
 all_predictions <- data.frame(id = compas_data$id, predicted_score = NA)
@@ -333,12 +310,17 @@ for (i in 1:10) {
   predicted_scores <- predict(regmod, newdata = test_data, type = 'response')
   all_predictions[names(predicted_scores),]$predicted_score <- predicted_scores
 }
+predicted_scores <- all_predictions$predicted_score
+confusionMatrix(data = as.numeric(predicted_scores>0.5), reference = compas_data$is_recid)
 ```
+
+# Using ProPublica's Bias-Assessment Model on Our Model
+
+We can see if our model suffers from the same bias using ProPublica's bias-assessment methodology. We'll set up the same model they did, but this time instead of predicting `score_factor` for the COMPAS score, we'll create a `score_factor` variable *from our model's predictions*.
 
 Next we create a new data frame with `new_score` as our risk of recidivism score. We also create a `new_score_text` variable that defines score categories in the same way, but this time based on a 0-1 scale instead of a 0-10 scale. Recall ProPublica defined this category as: High=8-10, Medium=5-7, Low=1-4. Thus we'll do: High=0.75-1.0, Medium=0.45-0.75, Low=0-0.45.
 
 ```{r}
-predicted_scores <- all_predictions$predicted_score
 our_scores <- compas_data %>%
   mutate(new_score = predicted_scores) %>%
   mutate(
