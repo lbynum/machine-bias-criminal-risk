@@ -2,16 +2,16 @@
 title: "Assessing and Mitigating Algorithmic Bias in Criminal Risk Scores"
 author: "Lucius Bynum, Preethi Seshadri"
 date: '19 November 2017'
-output:
-  html_document:
-    theme: journal
-    highlight: tango
-    df_print: paged
-# output: pdf_document
+# output:
+#   html_document:
+#     theme: journal
+#     highlight: tango
+#     df_print: paged
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, cache=FALSE)
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, cache=TRUE)
 options(digits=4)
 
 library(dplyr)
@@ -23,70 +23,25 @@ library(caret)
 
 # Introduction
 
+Across the nation, we see an increasing reliance on algorithms to assess a defendant’s likelihood of becoming a recidivist (a term used to describe convicted criminals who reoffend). These risk assessment scores significantly impact the severity of the sentence for defendants. For example, Broward County in Florida uses the COMPAS scoring algorithm to help determine pretrial release decisions.
+
+ProPublica is an independent, nonprofit newsroom whose mission is to “expose abuses of power and betrayals of the public trust by government, business, and other institutions, using the moral force of investigative journalism to spur reform through the sustained spotlighting of wrongdoing.” Through their analysis of the COMPAS recidivism algorithm for defendants in Broward County, they discovered that the algorithm correctly predicted recidivism for black and white defendants at approximately the same rate (around 60 percent). However, the accuracy itself paints a very misleading picture. The algorithm over-predicted black defendants to be at a high risk of recidivating, while the algorithm predicted white defendants to be at a lower risk than they actually were. 
+
+ProPublica’s analysis explores how scores are distributed across different demographics, creates a logistic regression to model the odds of getting a higher COMPAS score based on demographic features such as race, and uses a Cox proportional hazards model to measure how accurate the COMPAS predictions are (i.e. how often did people actually recidivate after receiving a score). In this project, we perform our own exploration and modeling of criminal risk scores and, using ProPublica’s methodology for measuring bias, we compare our model’s bias to the bias COMPAS scores exhibit.
+
 # Problem Statement
+
+We want to build our own model that uses the existing features from an individual’s profile to predict the likelihood of recidivating (a model that is not created in ProPublica’s analysis). After developing our own logistic regression model, we want to (1) compare the predictive accuracy of our model to the COMPAS model and (2) explore what kinds of bias exist in our model using the approach outlined by ProPublica and see if there are techniques we can employ to minimize our own algorithmic bias.
 
 # Data Description
 
-ProPublica collected data on **TODO**
+To construct their current dataset, ProPublica started with a database of COMPAS scores and built a profile of each individual's criminal history, both before and after they were scored. They then collected public criminal records from the Broward County Clerk’s Office website through April 1, 2016, and merged these two datasets into one by matching an individual’s first and last names as well as date of birth.
 
-In the data set we look at, they considered only people who either "recidivated within two years of their crime or "recidivated in tow years, or had at least tow years outside of a correctional facility."
+In the data set we look at, they considered only people who either "recidivated within two years of their crime or "recidivated in two years, or had at least tow years outside of a correctional facility."
 
 ### Data Dictionary
 
 ProPublica did not provide a data dictionary explaining their variables. Through some manual exploration, we came up with the following descriptions for our best guess at what each variable measures.
-
-<!-- -id: unque identifier for each individual -->
-<!-- -name: first and last name -->
-<!-- -first: first name -->
-<!-- -last: last name -->
-<!-- -compas_screening_dat: date on which decile_score was given -->
-<!-- -sex: sex (male or female) -->
-<!-- -dob: date of birth -->
-<!-- -age: age in years -->
-<!-- -age_cat: age category (less than 25, 25-45, greater than 45) -->
-<!-- -race: race (African-American, Asian, Caucasian, Hispanic, Native American, Other) -->
-<!-- -juv_fel_count: juvenile felony count -->
-<!-- -decile_score: COMPAS Risk of Recidivism score from 1 to 10 -->
-<!-- -juv_misd_count: juvenile misdemeanor count -->
-<!-- -juv_other_count: juvenile other offenses count -->
-<!-- -priors_count: prior offenses count -->
-<!-- -days_b_screening_arrest: number of days between COMPAS screening and arrest **TODO**: negative values? -->
-<!-- -c_jail_in: jail entry date for original crime -->
-<!-- -c_jail_out: jail exit date for original crime -->
-<!-- -c_case_number: case number for original crime -->
-<!-- -c_offense_date: offense date of original crime -->
-<!-- -c_arrest_date: arrest date for original crime -->
-<!-- -c_days_from_compas: days between COMPAS screening and original crime offense date -->
-<!-- -c_charge_degree: charge degree of original crime -->
-<!-- -c_charge_desc: description of charge for original crime -->
-<!-- -is_recid: binary indicator of recidivation (1=individual recidivated, 0=individual did not recidivate) -->
-<!-- -r_case_number: case number of follow-up crime -->
-<!-- -r_charge_degree: charge degree of follow-up crime -->
-<!-- -r_days_from_arrest: number of days between follow-up crime and arrest date **TODO**: why negative value here? -->
-<!-- -r_offense_date: date of follow-up crime -->
-<!-- -r_charge_desc: description of charge for follow-up crime -->
-<!-- -r_jail_in: jail entry date for follow-up crime -->
-<!-- -r_jail_out: jail exit date for follow-up crime -->
-<!-- -violent_recid: values are all `NA`. This column is ignored. -->
-<!-- -is_voilent_recid: binary indicator of violent follow-up crime (1=follow-up crime was violent, 0=follow-up crime was non-violent) -->
-<!-- -vr_case_number: case number for violent follow-up crime -->
-<!-- -vr_charge_degree: charge degree for violent follow-up crime -->
-<!-- -vr_offense_date: date of offense for violent follow-up crime -->
-<!-- -vr_charge_desc: description of charge for violent follow-up crime -->
-<!-- -type_of_assessment: the type of COMPAS score given for decile_score (here all values are Risk of Recidivism) -->
-<!-- -decile_score.1: repeat column of decile_score -->
-<!-- -score_text: ProPublica-defined category of decile_score (High: 8-10, Medium: 5-7, Low: 1-4) -->
-<!-- -screening_date: repeat column of compas_screening_date  -->
-<!-- -v_type_of_assessment: the type of COMPAS score given for v_decile_score (here all values are Risk_of_Violence) -->
-<!-- -v_decile_score: COMPAS Risk of Violence score from 1 to 10 -->
-<!-- -v_score_text: ProPublica-defined category of v_decile_score (High: 8-10, Medium: 5-7, Low: 1-4) -->
-<!-- -v_screening_date: date on which v_decile_score was given -->
-<!-- -in_custody: date on which individual was brought into custody -->
-<!-- -out_custody: date on which individual was released from custody -->
-<!-- -priors_count.1: repeat column of priors_count -->
-<!-- -start: **TODO** -->
-<!-- -end: **TODO** -->
-<!-- -event: **TODO** -->
 
 | Variable| Description|
 |--------------------------|----------------------------------------------------------------------------------------------------------------|
@@ -105,7 +60,7 @@ ProPublica did not provide a data dictionary explaining their variables. Through
 | juv_misd_count          | juvenile misdemeanor count|
 | juv_other_count         | juvenile other offenses count|
 | priors_count            | prior offenses count|
-| days_b_screening_arrest | number of days between COMPAS screening and arrest **TODO** negative values?|
+| days_b_screening_arrest | number of days between COMPAS screening and arrest|
 | c_jail_in               | jail entry date for original crime|
 | c_jail_out              | jail exit date for original crime|
 | c_case_number           | case number for original crime|
@@ -117,7 +72,7 @@ ProPublica did not provide a data dictionary explaining their variables. Through
 | is_recid                | binary indicator of recidivation (1=individual recidivated, 0=individual did not recidivate)|
 | r_case_number           | case number of follow-up crime|
 | r_charge_degree         | charge degree of follow-up crime|
-| r_days_from_arrest      | number of days between follow-up crime and arrest date **TODO** why negative value here?|
+| r_days_from_arrest      | number of days between follow-up crime and arrest date|
 | r_offense_date          | date of follow-up crime|
 | r_charge_desc           | description of charge for follow-up crime|
 | r_jail_in               | jail entry date for follow-up crime|
@@ -139,9 +94,10 @@ ProPublica did not provide a data dictionary explaining their variables. Through
 | in_custody              | date on which individual was brought into custody|
 | out_custody             | date on which individual was released from custody|
 | priors_count.1          | repeat column of priors_count|
-| start                   | **TODO**|
-| end                     | **TODO**|
-| event                   | **TODO**|
+| two_year_recid          | binary indicator of recidivation within two years of scoring (1=individual recidivated, 0=individual did not recidivate)|
+| start                   | unclear definition but not used in our analysis|
+| end                     | unclear definition but not used in our analysis|
+| event                   | unclear definition but not used in our analysis|
 
 ProPublica obtained this data with the goal of analyzing Northpointe Inc.’s commercial recidivism modeling tool -- COMPAS. Aggregating data from public records, they collected data on 18,610 individuals who received COMPAS scores from 2013 to 2014, including demographic information, public criminal records, and incarceration records.
 
@@ -193,7 +149,9 @@ Next we use their code to perform this filtering:
 ```{r}
 # code from https://github.com/propublica/compas-analysis
 df <- compas_data %>%
-  select(age, c_charge_degree, race, age_cat, score_text, sex, priors_count, days_b_screening_arrest, decile_score, is_recid, two_year_recid, c_jail_in, c_jail_out) %>% 
+  select(age, c_charge_degree, race, age_cat, score_text, sex, priors_count, 
+         days_b_screening_arrest, decile_score, is_recid, two_year_recid, 
+         c_jail_in, c_jail_out) %>% 
   filter(days_b_screening_arrest <= 30) %>%
   filter(days_b_screening_arrest >= -30) %>%
   filter(is_recid != -1) %>%
@@ -223,7 +181,8 @@ Next they fit a logistic regression model to predict `score_factor` from the oth
 ```{r}
 # code from https://github.com/propublica/compas-analysis
 pp_model <- glm(
-  score_factor ~ gender_factor + age_factor + race_factor + priors_count + crime_factor + two_year_recid, 
+  score_factor ~ gender_factor + age_factor + race_factor + priors_count + 
+    crime_factor + two_year_recid, 
   family="binomial", 
   data=df
 )
@@ -232,7 +191,7 @@ summary(pp_model)
 
 #### Calculating Relative Risk by Demographic
 
-Next they compute how much more likely different demographic groups are to receive a higher score than others. The logistic regression model allows us to measure this difference after correcting for the other variables included in the model. The quantity ProPublica uses to compare black defendants to white defendants (or men to women, old defendants to young defendants, etc.) is called **relative risk**. ProPublica does not explain where this quantity comes from in their analysis, so we'll provide some quick background on logistic regression to justify the calculation. The following explanation is inspired by USC professor Sandy Eckel's slides [here](http://www-hsc.usc.edu/~eckel/biostat2/notes/notes14.pdf).
+With a logistic regression model to measure the likelihood of getting a high COMPAS score based on demographic features, they compute how much more likely different demographic groups are to receive a higher score than others. The logistic regression model allows us to measure this difference after correcting for the other variables included in the model. The quantity ProPublica uses to compare black defendants to white defendants (or men to women, old defendants to young defendants, etc.) is called **relative risk**. ProPublica does not explain where this quantity comes from in their analysis, so we'll provide some quick background on logistic regression to justify the calculation. The following explanation is inspired by USC professor Sandy Eckel's slides [here](http://www-hsc.usc.edu/~eckel/biostat2/notes/notes14.pdf).
 
 Logistic regression models a linear relationship between the log odds ratio for the probability of interest and the given predictor variables. An odds ratio measures the odds of success
 
@@ -284,12 +243,11 @@ age_coef <- coef(pp_model)['age_factorLess than 25']
 
 # Our Logistic Regression Model
 
-<<<<<<< HEAD
-# Comparing Our Model's Predictive Performance to the COMPAS Model
+In this section we fit our own model to measure risk of recidivism. To keep the scope of the project manageable, our focus here will be minimizing racial bias. 
 
-**TODO**: Mention Compas accuracy
+## Comparing Our Model's Predictive Performance to the COMPAS Model
 
-To get valid predictions for the training data, we use 10-fold cross-validation.
+Here we fit our model and compare its predictive accuracy to the COMPAS model. To get estimates of our predictive accuracy from the training data, we use 10-fold cross-validation.
 
 ```{r}
 set.seed(123)
@@ -317,7 +275,9 @@ predicted_scores <- all_predictions$predicted_score
 confusionMatrix(data = as.numeric(predicted_scores > 0.5), reference = compas_data$is_recid)
 ```
 
-# Using ProPublica's Bias-Assessment Model on Our Model
+
+
+## Using ProPublica's Bias-Assessment Model on Our Model
 
 We can see if our model suffers from the same bias using ProPublica's bias-assessment methodology. We'll set up the same model they did, but this time instead of predicting `score_factor` for the COMPAS score, we'll create a `score_factor` variable *from our model's predictions*. We create a new data frame with `new_score` as our risk of recidivism score. We also create a `new_score_text` variable that defines score categories in the same way, but this time based on a 0-1 scale instead of a 0-10 scale. Recall ProPublica defined this category as: High=8-10, Medium=5-7, Low=1-4. Thus we'll do: High=0.75-1.0, Medium=0.45-0.75, Low=0-0.45.
 
@@ -360,7 +320,9 @@ new_pp_model <- glm(
 )
 ```
 
-## Bias against black vs. white people
+### Our model's bias against black vs. white people
+
+Now that we have re-fit ProPublica's model after using our own risk of recidivism scores, we can see what the relative risk for African-Americans relative to Caucasians is. 
 
 ```{r}
 model_intercept <- coef(new_pp_model)['(Intercept)']
@@ -368,21 +330,9 @@ black_coef <- coef(new_pp_model)['race_factorAfrican-American']
 (relative_risk_black_v_white <- sigmoid(model_intercept + black_coef) / sigmoid(model_intercept))
 ```
 
-<!-- ## Bias against women vs. men -->
+Here we see that with our model, there is still a bias against blacks. They are still 21\% more likely than whites to get a high risk of recidivism score after controlling for other features. However, this is a significant improvement over the level of bias in COMPAS scores, and our estimate of predictive accuracy was still higher than that of the COMPAS scores! 
 
-<!-- ```{r} -->
-<!-- woman_coef <- coef(new_pp_model)['gender_factorFemale'] -->
-<!-- (relative_risk_woman_v_man <- sigmoid(model_intercept + woman_coef) / sigmoid(model_intercept)) -->
-<!-- ``` -->
-
-<!-- ## Bias against under 25 vs. middle-aged -->
-
-<!-- ```{r} -->
-<!-- age_coef <- coef(new_pp_model)['age_factorLess than 25'] -->
-<!-- (relative_risk_young_v_middleage <- sigmoid(model_intercept + age_coef) / sigmoid(model_intercept)) -->
-<!-- ``` -->
-
-# Mitigating Bias
+# Mitigating Bias Directly
 
 Much work has been done exploring techniques that allow for fair modeling and prediction in the presence of biased data or algorithms, and this area of study is rich and actively researched. Researchers Faisal Kamiran and Toon Calders, in their 2011 paper 
 "Data preprocessing techniques for classification without discrimination," describe several techniques that *alter the given dataset* to (ideally) eliminate the source of the bias. Several other techniques deal with modifying classification/regression algorithms themselves to make fairer predictions. Here, the general idea is to instead clean the bias out of the data, after which normal classification methods can be used. Before we discuss the techniques we employ for dealing with bias, we first introduce a few key concepts.
