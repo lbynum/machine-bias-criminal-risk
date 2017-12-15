@@ -1,7 +1,7 @@
 ---
 title: "Assessing and Mitigating Algorithmic Bias in Criminal Risk Scores"
 author: "Lucius Bynum, Preethi Seshadri"
-date: '19 November 2017'
+date: '15 December 2017'
 # output:
 #   html_document:
 #     theme: journal
@@ -243,7 +243,9 @@ age_coef <- coef(pp_model)['age_factorLess than 25']
 
 # Our Logistic Regression Model
 
-In this section we fit our own model to measure risk of recidivism. To keep the scope of the project manageable, our focus here will be minimizing racial bias. 
+Now that we have gone through ProPublica’s analysis, we will create our own logistic regression model to predict recidivism using ProPublica’s dataset. To keep the scope of the project manageable, our focus here will be minimizing racial bias. For our model, we chose to include age, sex, juvenile infraction/misdemeanor/felony counts, prior offenses count, current charge degree (felony or misdemeanor), and time spent in jail for the current crime in our model. Although the dataset contains additional information about each individual, we did not include those in our model because it is unique to an individual (name, id, etc.) or related to a follow-up crime (and we cannot use follow-up crime information in predicting whether or not an individual will recidivate).
+
+Additionally, we focused primarily on racial bias in our analysis, but we could imagine removing age and/or sex from our model if we wanted to investigate those biases as well.
 
 ## Comparing Our Model's Predictive Performance to the COMPAS Model
 
@@ -275,7 +277,7 @@ predicted_scores <- all_predictions$predicted_score
 confusionMatrix(data = as.numeric(predicted_scores > 0.5), reference = compas_data$is_recid)
 ```
 
-
+The COMPAS Model has a predictive accuracy of roughly 62\%. Using 10-fold cross validation, we were able to gather predictions for each individual in our dataset and achieve an accuracy of approximately 68\%. Although the difference is not drastic, it is still a significant improvement over the COMPAS scoring model’s performance. Additionally, our algorithm only uses a handful of features for each individual, while the COMPAS algorithm leverages data from a far more involved, detailed assessment.
 
 ## Using ProPublica's Bias-Assessment Model on Our Model
 
@@ -362,7 +364,7 @@ Here we focus on Sampling.
 
 ### Applying Sampling to the COMPAS Data to Combat Racial Bias
 
-To narrow the scope of this report, we focus on *racial bias* against black people as compared to white people, and we implement sampling to combat this type of bias only. If our example words for racial bias, we could theoretically extend it to each of the protected attributes in the data.
+As mentioned before, to narrow the scope of this report, we focus on *racial bias* against black people as compared to white people, and we implement sampling to combat this type of bias only. If our example words for racial bias, we could theoretically extend it to each of the protected attributes in the data.
 
 First we need to establish what the class imbalance is between blacks and whites in our data. We look for an imbalance in terms of recidivism rates, since recidivism is what our model predicts.
 
@@ -397,6 +399,8 @@ In our case these correspond to:
 - FP: Caucasians with `is_recid` = 1
 - FN: Caucasians with `is_recid` = 0
 
+We create these partitions for our data.
+
 ```{r}
 DP_data <- compas_data %>%
   filter(race == 'African-American' & is_recid == 1)
@@ -408,11 +412,11 @@ FN_data <- compas_data %>%
   filter(race == 'Caucasian' & is_recid == 0)
 ```
 
-The process for sampling to get a non-discrimatory sample is as follows.
+The process for sampling to get a non-discrimatory distribution is as follows.
 
 1. Compute the expected size for each group if the data were non-discriminatory
 2. Under- and over-sample accordingly to eliminate descrimination
-3. Train the model on the sampled data
+3. Train the model on the sampled (now bias-free) data
 
 In order to get an estimation of how biased our model is after making this adjustment to the data, we nest this process in cross-validation. Thus our overall process will be the following (using k-fold cross-validation).
 
@@ -446,7 +450,7 @@ Thus we'll say the expected number of observations for each group is the mean of
 
 #### 2. Under- and over-sample to eliminate descrimination
 
-We want equal representation for each group (DP, DN, FP, and FN). This means getting `r expected_num_observations` observations of each. We under- or over-sample accordingly. Kamiran and Calders describe two methods for performing this sampling: *Preferential Sampling*, which is more likely to sample boundary observations (with a high probability of being in either class); and *Uniform Sampling*, which samples all points with equal probability. Here we perform Uniform Sampling with replacement. 
+We want equal representation for each group (DP, DN, FP, and FN). This means getting `r round(expected_num_observations, 0)` observations of each. We under- or over-sample accordingly. Kamiran and Calders describe two methods for performing this sampling: *Preferential Sampling*, which is more likely to sample boundary observations (with a high probability of being in either class); and *Uniform Sampling*, which samples all points with equal probability. Here we perform Uniform Sampling with replacement. 
 
 ```{r}
 set.seed(123)
@@ -560,7 +564,9 @@ post_sample_scores <- compas_data %>%
              ifelse(new_score >= 0.45, 'Medium', 'Low'))))
 # build ProPublica's data frame with our scores
 post_sample_df <- post_sample_scores %>%
-  select(age, c_charge_degree, race, age_cat, new_score_text, sex, priors_count, days_b_screening_arrest, new_score, is_recid, two_year_recid, c_jail_in, c_jail_out) %>% 
+  select(age, c_charge_degree, race, age_cat, new_score_text, sex, priors_count, 
+         days_b_screening_arrest, new_score, is_recid, two_year_recid, 
+         c_jail_in, c_jail_out) %>% 
   filter(days_b_screening_arrest <= 30) %>%
   filter(days_b_screening_arrest >= -30) %>%
   filter(is_recid != -1) %>%
@@ -576,13 +582,25 @@ post_sample_df <- post_sample_scores %>%
   mutate(score_factor = factor(new_score_text != "Low", labels = c("LowScore","HighScore")))
 # train ProPublica's model
 post_sample_pp_model <- glm(
-  score_factor ~ gender_factor + age_factor + race_factor + priors_count + crime_factor + two_year_recid,
+  score_factor ~ gender_factor + age_factor + race_factor + priors_count + 
+    crime_factor + two_year_recid,
   family="binomial",
   data=post_sample_df
 )
 ```
 
-Now we can measure the amount of bias in our model after applying sampling and compare to the bias before.
+Now we can measure the predictive accuracy and amount of bias in our model after applying sampling and compare to the bias before.
+
+### Predictive Accuracy Before and After Sampling
+
+Looking at our confusion matrix after sampling, we get:
+
+```{r}
+predicted_scores <- all_predictions$predicted_score
+confusionMatrix(data = as.numeric(predicted_scores > 0.5), reference = compas_data$is_recid)
+```
+
+Here we see our predictive accuracy is comparable to the accuracy before sampling.
 
 ### Bias Before and After Sampling
 
@@ -591,18 +609,32 @@ We can re-compute the relative risk for blacks vs. whites and compare it to the 
 ```{r}
 model_intercept <- coef(post_sample_pp_model)['(Intercept)']
 black_coef <- coef(post_sample_pp_model)['race_factorAfrican-American']
-(post_sample_relative_risk_black_v_white <- sigmoid(model_intercept + black_coef) / sigmoid(model_intercept))
+(post_sample_risk_black_v_white <- sigmoid(model_intercept + black_coef) / sigmoid(model_intercept))
 ```
 
 Taking the ratio and subtracting from 1, we were able to decrease the bias in relative risk by:
 
 ```{r}
-pre_sample_relative_risk_black_v_white <- relative_risk_black_v_white
-1 - post_sample_relative_risk_black_v_white / pre_sample_relative_risk_black_v_white
+pre_sample_risk_black_v_white <- relative_risk_black_v_white
+1 - post_sample_risk_black_v_white / pre_sample_risk_black_v_white
 ```
+
+Unfortunately, it looks like sampling did not help with our level of bias. the level of bias is about the same before and after -- the slight difference we see here could simply be due to variation in the cross-validation process. Though our preliminary bias-mitigation technique was not successful in this instance, this fact still gives us insight into bias in the COMPAS data. There are still some important takeaways we can draw from our experimentation.
+
+# Takeaways
+
 
 # References
 
+[1]  Angwin, Julia, et al. "Machine bias: There’s software used across the country to predict future criminals. and it’s biased against blacks." ProPublica, May 23 (2016).
+
+[2] Kamiran, Faisal, and Toon Calders. "Data preprocessing techniques for classification without discrimination." Knowledge and Information Systems 33.1 (2012): 1-33.
+
+[3] Larson, Jeff, et al. "How we analyzed the COMPAS recidivism algorithm." ProPublica (5 2016) (2016).
+
+[4] https://github.com/propublica/compas-analysis 
+
+[5] http://www-hsc.usc.edu/~eckel/biostat2/slides/lecture16.pdf 
 
 
 
