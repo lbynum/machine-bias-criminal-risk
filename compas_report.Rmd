@@ -243,9 +243,7 @@ age_coef <- coef(pp_model)['age_factorLess than 25']
 
 # Our Logistic Regression Model
 
-Now that we have gone through ProPublica’s analysis, we will create our own logistic regression model to predict recidivism using ProPublica’s dataset. To keep the scope of the project manageable, our focus here will be minimizing racial bias. For our model, we chose to include age, sex, juvenile infraction/misdemeanor/felony counts, prior offenses count, current charge degree (felony or misdemeanor), and time spent in jail for the current crime in our model. Although the dataset contains additional information about each individual, we did not include those in our model because it is unique to an individual (name, id, etc.) or related to a follow-up crime (and we cannot use follow-up crime information in predicting whether or not an individual will recidivate).
-
-Additionally, we focused primarily on racial bias in our analysis, but we could imagine removing age and/or sex from our model if we wanted to investigate those biases as well.
+Now that we have gone through ProPublica’s analysis, we will create our own logistic regression model to predict recidivism using ProPublica’s dataset. Given that COMPAS scores measure the risk of recidivating, we can create our own version of a COMPAS score by simply predicting the probability of recidivating. To keep the scope of the project manageable, our focus here will be minimizing racial bias. For our model, we chose to include age, sex, juvenile infraction/misdemeanor/felony counts, prior offenses count, and current charge degree (felony or misdemeanor). Although the dataset contains additional information about each individual, we did not include those in our model because it is unique to an individual (name, id, etc.) or related to a follow-up crime (and we cannot use follow-up crime information in predicting whether or not an individual will recidivate). Additionally, we focused primarily on racial bias in our analysis, but we could imagine removing age and/or sex from our model if we wanted to investigate those biases as well.
 
 ## Comparing Our Model's Predictive Performance to the COMPAS Model
 
