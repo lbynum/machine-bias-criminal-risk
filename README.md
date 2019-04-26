@@ -48,4 +48,3 @@ r_charge_desc, r_jail_in, r_jail_out, violent_recid, is_violent_recid, vr_case_n
 vr_charge_degree, vr_offense_date, vr_charge_desc, type_of_assessment, decile_score, score_text, 
 screening_date, v_type_of_assessment, v_decile_score, v_score_text, v_screening_date, in_custody, 
 out_custody, priors_count, start, end, event, two_year_recid
-
